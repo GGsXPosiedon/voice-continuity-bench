@@ -2,6 +2,20 @@
 
 A computer-only prototype of a backup microphone selector. It provides real local audio routing plus simulated failures. It is research software, not FIA-approved equipment or a radio system.
 
+## The Singapore GP story
+
+On 11 October 2026, Max Verstappen finally won the Singapore Grand Prix at Marina Bay. During that winning drive, Red Bull also had a much less glamorous problem: race engineer Gianpiero "GP" Lambiase was struggling to hear Max over the radio. When GP wanted Max's thoughts about a possible Safety Car pit stop, getting an answer was suddenly difficult. The team also used the pit board to communicate. [Official F1 race report](https://www.formula1.com/en/latest/article/verstappen-seals-commanding-singapore-grand-prix-victory-from-leclerc-and-antonelli.49wDzysiVqi5cloGjle40A)
+
+After the race, Max explained that GP had tried asking questions in code, said the radio had troubled him throughout the season, and joked that his engineer might have enjoyed the quieter channel. It was a memorable combination: a race win, a communication failure, and two people improvising to keep working together. [Post-race press conference transcript](https://www.grandprix.com/races/singapore-gp-2026-sunday-press-conference.html)
+
+## Why we built this
+
+That incident started our conversation about a practical engineering question: **what could keep a driver's voice available when the primary microphone path fails?** We explored a second microphone, separate wiring, and a selector feeding the prescribed voice system. We then built this computer prototype to make those ideas testable before buying or designing hardware.
+
+The bench lets us deliberately lose the primary input, move to a backup automatically or manually, and see why two microphones still cannot survive a failed shared output. It also preserves an important distinction: a quiet driver is not the same as a broken microphone, so silence alone never triggers failover.
+
+Singapore is the inspiration, not a hardware diagnosis. The reports above do not establish exactly which component failed in Max's car. Our injected faults model possible failures; they do not reproduce Red Bull's equipment. This is an independent learning and research project with no affiliation to Formula 1, the FIA, Red Bull Racing, or Max Verstappen. Any on-car implementation would need the relevant supplier and FIA authorization.
+
 ## Start
 
 Double-click **standalone.html** to open the complete app in Chrome or Edge. This version needs no installation and no server. Simulation uses generated test tones, not human speech.
