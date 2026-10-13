@@ -16,7 +16,18 @@ The application lifecycle suite uses a DOM/audio test harness with mocked media 
 
 The previous deployed version was opened over HTTPS and its live simulation was exercised: primary input, automatic backup, recovery retaining backup, manual selection and no-output states were observed through the interface. Its meters showed generated audio levels and silence after a failed manual selection.
 
-Version 0.2 is being verified on a staged Vercel deployment before promotion. The final results are recorded below after those checks.
+Version 0.2 was verified on its staged Vercel deployment before promotion. The live browser checks passed:
+
+- Bench, System design and Project story rendered and navigated correctly.
+- At 320 px and 390 px viewport settings, the tested pages had equal document and content widths, with no horizontal overflow. A decorative track line found during the first check was corrected before the final run.
+- Generated signals appeared in the live scope and meters.
+- Failing primary selected backup; restoring primary retained backup.
+- Manual failure showed no active output until backup was selected.
+- Shared output failure showed no active output.
+- Navigation preserved the running session and backup route. The header Stop control remained available on the design page and returned the session to idle.
+- No browser console errors appeared during the final test sequence.
+
+The startup and car-transition lifecycle, reduced-motion behavior and keyboard-focus logic additionally passed the automated navigation suite. Real microphone permission and physical devices were not exercised during these browser checks.
 
 ## Physical limits
 
