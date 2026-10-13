@@ -6,7 +6,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { Router } = require('../routing-core.js');
 
 function harness() {
   const elements = new Map();
@@ -16,7 +15,7 @@ function harness() {
       this.disabled = false; this.hidden = false; this.checked = false; this.handlers = {};
       this.attributes = {}; this.className = ''; this.classes = new Set();
       this.clientWidth = 500; this.clientHeight = 80; this.width = 500; this.height = 80;
-      this.classList = { toggle: (name, value) => value ? this.classes.add(name) : this.classes.delete(name) };
+      this.classList = { toggle: (name, value) => value ? this.classes.add(name) : this.classes.delete(name), add: (name) => this.classes.add(name), remove: (name) => this.classes.delete(name) };
     }
     addEventListener(type, action) { (this.handlers[type] ||= []).push(action); }
     async emit(type) { await Promise.all((this.handlers[type] || []).map((action) => action())); }
@@ -24,6 +23,7 @@ function harness() {
     prepend(child) { child.parent = this; this.children.unshift(child); }
     replaceChildren(...children) { this.children = []; this.append(...children); }
     setAttribute(name, value) { this.attributes[name] = value; }
+    removeAttribute(name) { delete this.attributes[name]; }
     querySelector() { return null; }
     get options() { return this.children; }
     get lastElementChild() { return this.children.at(-1); }
@@ -60,15 +60,15 @@ function harness() {
     enumerateDevices: async () => [{ kind: 'audioinput', deviceId: 'physical-primary', label: 'Virtual microphone' }],
     addEventListener(type, callback) { mediaHandlers[type] = callback; },
   };
-  const window = { AudioContext, addEventListener() {} };
+  const window = { AudioContext, addEventListener() {}, location: { hash: '' }, matchMedia: () => ({ matches: true, addEventListener() {} }) };
   const sandbox = {
-    window, navigator: { mediaDevices }, VoiceRouting: { Router },
-    document: { getElementById: el, createElement: (tag) => new Element(tag) },
+    window, navigator: { mediaDevices },
+    document: { getElementById: el, createElement: (tag) => new Element(tag), querySelectorAll: () => [], body: new Element('body') },
     Option: class extends Element { constructor(label, value) { super('option'); this.textContent = label; this.value = value; } },
     performance: { now: () => 1000 }, requestAnimationFrame(callback) { animationCallbacks.push(callback); },
     Blob, URL, setTimeout, Float32Array, console,
   };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8'), sandbox, { filename: 'app.js' });
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'), sandbox, { filename: 'app.js' });
   return { el, window, mediaDevices, contexts, streams, makeStream, frame: () => animationCallbacks.shift()(1000), snapshot: () => window.voiceBench.snapshot() };
 }
 const click = (h, id) => h.el(id).emit('click');

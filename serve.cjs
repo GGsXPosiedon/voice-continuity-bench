@@ -2,7 +2,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const root = __dirname;
+const root = path.join(__dirname, 'public');
 const port = Number(process.env.VOICE_BENCH_PORT || 8787);
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 const server = http.createServer((req, res) => {

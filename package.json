@@ -1,11 +1,16 @@
 {
   "name": "voice-continuity-bench",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Local voice-routing research prototype with a backup microphone path.",
   "scripts": {
-    "build": "node build-site.cjs",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && node build-site.cjs",
     "start": "node serve.cjs",
-    "test": "node --test tests/routing.test.cjs tests/app-lifecycle.test.cjs"
+    "test": "npm run build && node --test tests/routing.test.cjs tests/app-lifecycle.test.cjs tests/navigation.test.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
   }
 }

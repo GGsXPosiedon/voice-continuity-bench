@@ -3,73 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A local voice-routing prototype with two inputs, manual selection, automatic failover, and fault injection.">
-  <title>Voice continuity bench</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="routing-core.js" defer></script>
-  <script src="app.js" defer></script>
+  <meta name="theme-color" content="#101316">
+  <meta name="description" content="An independent voice-routing research bench inspired by the Singapore Grand Prix. Test a primary and backup microphone path.">
+  <title>Routing bench · Voice continuity</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
 </head>
-<body>
-<main>
-  <header class="masthead">
-    <a class="brand" href="#" aria-label="Voice continuity bench home"><span class="brand-mark" aria-hidden="true">V<span>2</span></span> VOICE CONTINUITY</a>
-    <span class="edition">LOCAL RESEARCH PROTOTYPE <span>v0.1</span></span>
+<body class="booting">
+<svg class="svg-definitions" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><symbol id="race-car" viewBox="0 0 240 100"><g fill="#0a0c0e" stroke="#52616b" stroke-width="1"><rect x="58" y="7" width="33" height="23" rx="5"/><rect x="58" y="70" width="33" height="23" rx="5"/><rect x="162" y="9" width="29" height="23" rx="5"/><rect x="162" y="68" width="29" height="23" rx="5"/></g><g stroke="#9eacb4" stroke-width="3"><path d="M81 25 114 44M81 75 114 56M176 28 155 44M176 72 155 56"/></g><path fill="#eb704c" d="m45 36 32-6 29 7 54 6 50 3v8l-50 3-54 6-29 7-32-6z"/><path fill="#f3a080" d="m85 35 41 8 24 3v8l-24 3-41 8 14-15z"/><path fill="#172129" stroke="#d3dce0" stroke-width="2" d="M108 39c-17 0-23 22 0 22h24V39z"/><ellipse fill="#879da8" cx="116" cy="50" rx="7" ry="8"/><path fill="none" stroke="#e4e9eb" stroke-width="3" d="M133 39v22m-1-11h-15"/><g fill="#eb704c"><rect x="32" y="24" width="12" height="52" rx="2"/><rect x="204" y="24" width="9" height="52" rx="2"/></g><g fill="#e8eded"><rect x="33" y="27" width="4" height="46"/><rect x="209" y="27" width="3" height="46"/></g><path fill="#34444e" d="m48 40 28 6v8l-28 6z"/></symbol></defs></svg>
+
+<div class="startup" id="startup" aria-label="Loading the voice continuity bench" role="status">
+  <div class="startup-inner"><p class="mono muted">VOICE CONTINUITY / V0.2</p><div class="start-lights" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><div class="boot-track" aria-hidden="true"><svg class="boot-car"><use href="#race-car"/></svg></div><p class="startup-label">Preparing the bench<span class="loading-dots">…</span></p></div>
+</div>
+<div class="race-wipe" id="page-transition" aria-hidden="true" hidden><div class="wipe-slab"></div><div class="wipe-track"><span class="speed-line speed-one"></span><span class="speed-line speed-two"></span><svg class="transition-car"><use href="#race-car"/></svg><span id="transition-label">Routing bench</span></div></div>
+<noscript><style>.startup{display:none}body.booting{overflow:auto}</style><div class="noscript">This instrument needs JavaScript to route audio. Enable JavaScript and reload.</div></noscript>
+
+<div class="app-shell">
+  <header class="app-header">
+    <a class="wordmark" href="#bench" data-route="bench" aria-label="Voice continuity home"><span class="mark" aria-hidden="true"><i></i><i></i></span><span>VOICE<br><b>CONTINUITY</b></span></a>
+    <nav aria-label="Main navigation"><a href="#bench" data-route="bench" aria-current="page">Bench</a><a href="#system" data-route="system">System design</a><a href="#story" data-route="story">Project story</a></nav>
+    <div class="header-session"><span class="session-dot" aria-hidden="true"></span><span id="session-indicator">Session idle</span><button id="global-stop" class="stop-session" hidden>Stop session</button></div>
   </header>
 
-  <section class="intro">
-    <div><p class="eyebrow">TWO INPUTS. ONE CONVERSATION.</p><h1>Keep the voice connected.</h1><p class="lede">Explore a backup microphone path. Break an input, switch the route, and see what still gets through.</p></div>
-    <div class="status-pill" id="bench-status"><span class="status-dot"></span><span id="bench-status-text">Bench stopped</span></div>
-  </section>
+  <main id="page-content">
+    <section id="page-bench" class="page-view" aria-labelledby="heading-bench">
+      <div class="page-heading"><div><p class="overline">RESEARCH INSTRUMENT / 01</p><h1 id="heading-bench" tabindex="-1">Voice routing bench</h1><p class="page-description">Two microphone inputs. A deliberate route. A way to test what happens when one fails.</p></div><div class="status-pill" id="bench-status"><span class="status-dot" aria-hidden="true"></span><span id="bench-status-text">Bench stopped</span></div></div>
 
-  <section class="setup panel" aria-labelledby="setup-heading">
-    <div class="section-title"><h2 id="setup-heading">01 / Source setup</h2><span id="source-description">Generated test signals · no microphone access</span></div>
-    <div class="setup-row">
-      <div class="field"><label for="source-mode">Input source</label><select id="source-mode"><option value="simulation">Simulation · no hardware needed</option><option value="microphone">Microphone bench · permission required</option></select></div>
-      <div class="field"><label for="routing-mode">Routing policy</label><select id="routing-mode"><option value="auto">Automatic backup</option><option value="manual">Manual selection</option></select></div>
-      <div class="run-controls"><button class="primary" id="start">Start bench <span aria-hidden="true">↗</span></button><button id="resume" hidden>Resume audio</button><button id="stop" disabled>Stop</button></div>
-    </div>
-    <div class="microphone-setup" id="microphone-setup" hidden>
-      <div class="setup-row"><button id="discover">Find microphones</button><div class="field"><label for="primary-device">Primary input</label><select id="primary-device"><option value="default">Default microphone</option></select></div><div class="field"><label for="backup-device">Backup input</label><select id="backup-device"><option value="">No second microphone</option></select></div></div>
-      <p class="note" id="device-note">Click Find microphones to grant access and list devices. One microphone supports the primary path only.</p>
-    </div>
-    <p class="error" id="error" role="alert" hidden></p>
-  </section>
+      <section class="setup instrument-panel" aria-labelledby="setup-heading">
+        <div class="section-title"><h2 id="setup-heading">Session configuration</h2><span id="source-description">Generated test signals · no microphone access</span></div>
+        <div class="setup-row"><div class="field"><label for="source-mode">Source</label><select id="source-mode"><option value="simulation">Simulation / two test signals</option><option value="microphone">Microphone inputs</option></select></div><div class="field"><label for="routing-mode">Selection policy</label><select id="routing-mode"><option value="auto">Automatic backup</option><option value="manual">Manual selection</option></select></div><div class="run-controls"><button class="primary" id="start">Start session <span aria-hidden="true">↗</span></button><button id="resume" hidden>Resume audio</button><button id="stop" disabled>Stop</button></div></div>
+        <div id="microphone-setup" class="microphone-setup" hidden><div class="setup-row"><button id="discover">Find microphones</button><div class="field"><label for="primary-device">Primary device</label><select id="primary-device"><option value="default">Default microphone</option></select></div><div class="field"><label for="backup-device">Backup device</label><select id="backup-device"><option value="">No second microphone</option></select></div></div><p class="note" id="device-note">Grant access to list your devices. A physical backup needs a separate microphone.</p></div>
+        <p class="error" id="error" role="alert" hidden></p>
+      </section>
 
-  <section class="signal-section" aria-labelledby="path-heading">
-    <div class="section-title"><h2 id="path-heading">02 / Signal path</h2><span id="route-summary" aria-live="polite">Start the bench to route a signal.</span></div>
-    <div class="path-layout">
-      <div class="inputs">
-        <article class="input-card" id="primary-card">
-          <div class="card-head"><span class="channel-letter">A</span><div><h3>Primary microphone</h3><span class="source-label" id="primary-label">Generated signal · 210 Hz</span></div><span class="health" id="primary-health">Not started</span></div>
-          <canvas id="primary-wave" height="90" role="img" aria-label="Primary input waveform"></canvas>
-          <div class="meter-row"><span>INPUT LEVEL</span><meter id="primary-meter" min="0" max="1" value="0" aria-label="Primary input level"></meter><output id="primary-db">— dBFS</output></div>
-          <div class="card-actions"><button id="select-primary">Use primary</button><button class="fault" id="fault-primary" aria-pressed="false">Fail primary</button></div>
-        </article>
-        <article class="input-card" id="backup-card">
-          <div class="card-head"><span class="channel-letter">B</span><div><h3>Backup microphone</h3><span class="source-label" id="backup-label">Generated signal · 310 Hz</span></div><span class="health" id="backup-health">Not started</span></div>
-          <canvas id="backup-wave" height="90" role="img" aria-label="Backup input waveform"></canvas>
-          <div class="meter-row"><span>INPUT LEVEL</span><meter id="backup-meter" min="0" max="1" value="0" aria-label="Backup input level"></meter><output id="backup-db">— dBFS</output></div>
-          <div class="card-actions"><button id="select-backup">Use backup</button><button class="fault" id="fault-backup" aria-pressed="false">Fail backup</button></div>
-        </article>
+      <div class="section-title path-heading"><h2>Acquisition &amp; routing</h2><span id="route-summary" aria-live="polite">Start the bench to route a signal.</span></div>
+      <div class="channel-grid">
+        <article class="input-card instrument-panel" id="primary-card"><div class="card-head"><span class="channel-letter">A</span><div><h3>Primary input</h3><span id="primary-label" class="source-label">Generated signal · 210 Hz</span></div><span class="health" id="primary-health">Not started</span></div><div class="scope"><canvas id="primary-wave" role="img" aria-label="Primary input waveform"></canvas><span class="scope-label">LIVE INPUT</span></div><div class="meter-row"><span>LEVEL</span><meter id="primary-meter" min="0" max="1" value="0" aria-label="Primary input level"></meter><output id="primary-db">−∞ dBFS</output></div><div class="card-actions"><button id="select-primary" aria-pressed="false">Select primary</button><button class="fault" id="fault-primary" aria-pressed="false">Fail primary</button></div></article>
+        <article class="input-card instrument-panel" id="backup-card"><div class="card-head"><span class="channel-letter">B</span><div><h3>Backup input</h3><span id="backup-label" class="source-label">Generated signal · 310 Hz</span></div><span class="health" id="backup-health">Not started</span></div><div class="scope"><canvas id="backup-wave" role="img" aria-label="Backup input waveform"></canvas><span class="scope-label">LIVE INPUT</span></div><div class="meter-row"><span>LEVEL</span><meter id="backup-meter" min="0" max="1" value="0" aria-label="Backup input level"></meter><output id="backup-db">−∞ dBFS</output></div><div class="card-actions"><button id="select-backup" aria-pressed="false">Select backup</button><button class="fault" id="fault-backup" aria-pressed="false">Fail backup</button></div></article>
       </div>
-      <div class="route-connector" aria-hidden="true"><span>A</span><div class="connector-line"></div><span>B</span></div>
-      <article class="output-card panel" id="output-card">
-        <div class="section-title"><h3>Selected output</h3><span class="small-tag">LOCAL AUDIO</span></div>
-        <div class="output-route"><span class="output-letter" id="output-letter">—</span><div><p class="output-name" id="output-name">No active input</p><p id="output-detail">Waiting to start</p></div></div>
-        <canvas id="output-wave" height="120" role="img" aria-label="Selected output waveform before listening volume"></canvas>
-        <div class="meter-row"><span>OUTPUT LEVEL</span><meter id="output-meter" min="0" max="1" value="0" aria-label="Selected output level"></meter><output id="output-db">— dBFS</output></div>
-        <div class="monitor"><label class="check"><input type="checkbox" id="listen"> Listen to output</label><span>Use headphones for microphone tests.</span><div class="volume-row"><label for="volume">Volume</label><input id="volume" type="range" min="0" max="100" value="20"><output id="volume-value">20%</output></div></div>
-        <button class="fault wide" id="fault-link" aria-pressed="false">Fail shared output link</button>
-        <p class="note">Both microphones share this output path. A failure here defeats either input.</p>
-      </article>
-    </div>
-  </section>
 
-  <section class="bottom-grid">
-    <article class="panel scenarios" aria-labelledby="scenario-heading"><div class="section-title"><h2 id="scenario-heading">03 / Try a failure</h2><button class="text-button" id="restore">Restore faults</button></div><div class="scenario-buttons"><button id="scenario-primary"><span>01</span><div><strong>Lose the primary input</strong><small>Automatic mode → backup takes over</small></div><span aria-hidden="true">↗</span></button><button id="scenario-manual"><span>02</span><div><strong>Keep the driver in control</strong><small>Manual mode → choose the backup yourself</small></div><span aria-hidden="true">↗</span></button><button id="scenario-shared"><span>03</span><div><strong>Find the shared weakness</strong><small>Both inputs healthy → output still fails</small></div><span aria-hidden="true">↗</span></button></div><p class="note">Automatic switching reacts to injected faults or a reported unavailable input. Ordinary silence never triggers failover. Recovery keeps the current healthy route.</p></article>
-    <article class="panel log-panel" aria-labelledby="log-heading"><div class="section-title"><h2 id="log-heading">Event log</h2><button class="text-button" id="export">Export report</button></div><ol id="events" aria-label="Routing event history"><li class="empty-log">Start a session to see routing events.</li></ol><p class="note">Reports contain session events and settings. No audio is recorded or uploaded.</p></article>
-  </section>
-  <footer><span>Computer demonstrator · no RF transmission · no FIA approval</span><a href="hardware-design.md">Hardware design &amp; approval route ↗</a></footer>
-</main>
+      <article id="output-card" class="output-card instrument-panel" aria-labelledby="output-heading"><div class="output-main"><div class="output-route"><span class="output-letter" id="output-letter">—</span><div><p class="overline" id="output-heading">SELECTED OUTPUT</p><h3 id="output-name">No active input</h3><p id="output-detail">Waiting to start</p></div></div><div class="output-scope"><canvas id="output-wave" role="img" aria-label="Selected output waveform before listening volume"></canvas><div class="meter-row"><span>LEVEL</span><meter id="output-meter" min="0" max="1" value="0" aria-label="Selected output level"></meter><output id="output-db">−∞ dBFS</output></div></div></div><div class="output-controls"><div class="monitor"><label class="check"><input id="listen" type="checkbox">Listen to output</label><span class="note">Use headphones for microphone sessions.</span></div><div class="volume-row"><label for="volume">Volume</label><input id="volume" type="range" min="0" max="100" value="20"><output id="volume-value">20%</output></div><button class="fault" id="fault-link" aria-pressed="false">Fail shared output link</button></div></article>
+
+      <div class="bottom-grid"><section class="instrument-panel scenarios" aria-labelledby="scenario-heading"><div class="section-title"><h2 id="scenario-heading">Fault presets</h2><button class="text-button" id="restore">Restore faults</button></div><div class="scenario-buttons"><button id="scenario-primary"><span class="preset-code">A → B</span><span><strong>Primary lost</strong><small>Automatic backup takes over</small></span><span aria-hidden="true">↗</span></button><button id="scenario-manual"><span class="preset-code">MAN</span><span><strong>Driver selection</strong><small>Choose the surviving input yourself</small></span><span aria-hidden="true">↗</span></button><button id="scenario-shared"><span class="preset-code">BUS</span><span><strong>Shared link lost</strong><small>Neither microphone can reach the output</small></span><span aria-hidden="true">↗</span></button></div><p class="note">Automatic switching monitors availability, not volume. Silence never triggers a switch, and recovery retains the healthy selected route.</p></section><section class="instrument-panel log-panel" aria-labelledby="log-heading"><div class="section-title"><h2 id="log-heading">Session events <span class="event-count" id="event-count">0</span></h2><button class="text-button" id="export">Export JSON</button></div><ol id="events" aria-label="Routing event history"><li class="empty-log">No session events yet.</li></ol><p class="note">The report contains events and settings. Audio stays in your browser.</p></section></div>
+      <div class="bench-footnote"><span class="mono">CAPTURE → SELECT → OUTPUT</span><span>This computer prototype tests local routing. It does not transmit to a car.</span></div>
+    </section>
+
+    <section id="page-system" class="page-view document-page" aria-labelledby="heading-system" hidden><div class="page-heading"><div><p class="overline">DESIGN NOTES / 02</p><h1 id="heading-system" tabindex="-1">One conversation.<br>Two capture paths.</h1><p class="page-description">Start with the failure you want to survive. Then make the backup independent of it.</p></div><span class="document-tag">PROPOSED ARCHITECTURE</span></div>
+      <div class="architecture instrument-panel"><div class="diagram-inputs"><div class="diagram-node"><span class="channel-letter">A</span><div><strong>Speech microphone</strong><small>Dedicated cable &amp; connector</small></div></div><div class="diagram-node"><span class="channel-letter">B</span><div><strong>Contact microphone</strong><small>Separate capture path</small></div></div></div><div class="diagram-arrow" aria-hidden="true">→</div><div class="diagram-node selector-node"><span class="mono muted">01</span><div><strong>Audio selector</strong><small>Manual override · explicit health</small></div></div><div class="diagram-arrow" aria-hidden="true">→</div><div class="diagram-node"><span class="mono muted">02</span><div><strong>Prescribed voice system</strong><small>Engineer / FIA / broadcaster access</small></div></div></div>
+      <div class="design-columns"><section><p class="overline">FAILURE COVERAGE</p><h2>The shared path matters.</h2><p>A separate microphone and cable can preserve speech when the primary capture path fails. The selector, its power, the radio, and the antenna can still be common points of failure.</p><div class="coverage-table"><div><span>Primary microphone or cable</span><strong class="text-green">Potentially covered</strong></div><div><span>Quiet driver</span><strong>No automatic switch</strong></div><div><span>Shared selector or output</span><strong class="text-orange">Not covered</strong></div><div><span>Transmitter or antenna</span><strong class="text-orange">Not covered</strong></div></div></section><section><p class="overline">BEFORE A CAR</p><h2>A lab concept with a review route.</h2><p>The FIA rules prescribe the driver voice system and restrict duplicating standard components. An on-car design needs the designated supplier and FIA process. The computer bench is a way to investigate behavior before hardware work.</p><ol class="design-steps"><li><span>01</span>Identify the actual failed component.</li><li><span>02</span>Verify independent capture and intelligibility.</li><li><span>03</span>Measure switching gaps and common failures.</li><li><span>04</span>Review the design with the supplier and FIA.</li></ol><a class="inline-link" href="/hardware-design.md">Read the complete hardware brief ↗</a></section></div>
+      <div class="design-limit"><span class="mono">12 MS</span><p>The software uses a nominal 12 ms gain ramp. This is a setting, not a measured failover gap or radio latency guarantee.</p></div>
+    </section>
+
+    <section id="page-story" class="page-view document-page story-page" aria-labelledby="heading-story" hidden><div class="story-layout"><div class="story-side"><p class="overline">SINGAPORE / 11 OCT 2026</p><div class="race-caption"><span>MARINA BAY</span><strong>62</strong><span>LAPS · ONE UNRELIABLE CONVERSATION</span></div><div class="story-track" aria-hidden="true"><svg><use href="#race-car"/></svg><span></span></div><p class="mono muted">INDEPENDENT RESEARCH PROJECT</p></div><article class="story-copy"><p class="overline">THE REASON WE STARTED / 03</p><h1 id="heading-story" tabindex="-1">A winning drive.<br>A voice going missing.</h1><p class="story-lead">Max Verstappen won in Singapore while Red Bull struggled to hear his replies. The result survived. The conversation needed improvisation.</p><p>Race engineer Gianpiero “GP” Lambiase wanted Max’s thoughts about a possible Safety Car pit stop, but hearing him was difficult. The team also used the pit board. Afterwards, Max described questions in code, a radio that had troubled him throughout the season, and a joke that GP might have enjoyed the quiet.</p><p>That became our starting point: <strong>what could keep the driver’s voice available when a primary capture path fails?</strong> We explored separate microphones and wiring, then built a bench where those decisions could be tested without buying hardware.</p><p>The app makes both the promise and the limitation visible. A backup can keep the local signal flowing. A shared output failure can still defeat both inputs.</p><p class="story-caveat">The exact failed component in Max’s car was not established in the reports we checked. This bench models possible faults and has no affiliation with Formula 1, the FIA, Red Bull Racing, or Max Verstappen.</p><div class="story-sources"><a href="https://www.formula1.com/en/latest/article/verstappen-seals-commanding-singapore-grand-prix-victory-from-leclerc-and-antonelli.49wDzysiVqi5cloGjle40A" target="_blank" rel="noopener noreferrer">Official F1 race report ↗</a><a href="https://www.grandprix.com/races/singapore-gp-2026-sunday-press-conference.html" target="_blank" rel="noopener noreferrer">Post-race transcript ↗</a></div><a href="#bench" data-route="bench" class="primary story-action">Open the routing bench <span aria-hidden="true">↗</span></a></article></div></section>
+  </main>
+  <footer class="app-footer"><span>Voice continuity <span class="mono">V0.2 / TYPESCRIPT</span></span><span>Research prototype · no FIA approval</span><a href="https://github.com/GGsXPosiedon/voice-continuity-bench" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a></footer>
+</div>
 </body>
 </html>

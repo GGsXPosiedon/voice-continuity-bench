@@ -1,48 +1,25 @@
-# Validation record — 13 October 2026
+# Validation record — version 0.2
 
-## Passed
+Prepared 13 October 2026.
 
-**22 automated tests:** 12 routing-policy tests and 10 application lifecycle tests. Command:
+## Automated checks
 
-    node --test tests/routing.test.cjs tests/app-lifecycle.test.cjs
+The TypeScript source passes strict type checking. The production build generates the browser bundle and copies only the app HTML, stylesheet and hardware brief into `public/`.
 
-The lifecycle suite executes the app's actual event handlers against a minimal DOM, Web Audio and media-device test harness. Its microphone streams and audio nodes are mocked. These tests do not access the user's microphone or prove real browser audio performance.
+**29 automated checks** cover the routing policy, microphone lifecycle, navigation and motion controls. Run `npm test` to build the same source used in production and execute the tests.
 
-Coverage includes:
+Coverage includes primary failure, backup recovery, manual control, shared output failure, no usable inputs, duplicate physical-device resolution, permission denial, cleanup after Stop or cancellation, and quiet input remaining available. Navigation tests cover deep links, startup completion, transition midpoint/completion, rapid navigation, normal modified-link behavior, browser history and reduced motion.
 
-- Primary-to-backup selection after a known fault.
-- Recovery retaining the healthy selected input.
-- Automatic recovery to primary if the selected backup subsequently fails.
-- Manual selection retaining driver control.
-- Both inputs unavailable and shared output-link failure.
-- Correct single-microphone behavior: no independent backup.
-- Device-ended notifications, duplicate device selections and duplicate resolved device IDs.
-- Permission denial and recovery to simulation mode.
-- Temporary discovery streams released after enumeration.
-- Microphone tracks released and audio context closed on Stop.
-- Late microphone acquisition after cancellation immediately released.
-- Backup acquisition failure retaining an available primary.
-- Zero sample levels leaving a quiet microphone selected and available.
-- Invalid routing controls rejected and snapshot state protected from external mutation.
+The application lifecycle suite uses a DOM/audio test harness with mocked media streams. These tests do not access a person's microphone or establish real audio performance. The navigation suite checks state and timing behavior; it does not measure visual animation quality.
 
-JavaScript syntax checks and self-contained artifact checks also passed. The standalone artifact embeds the same application and routing sources; it has no external script or stylesheet dependencies.
+## Browser verification
 
-## Unverified
+The previous deployed version was opened over HTTPS and its live simulation was exercised: primary input, automatic backup, recovery retaining backup, manual selection and no-output states were observed through the interface. Its meters showed generated audio levels and silence after a failed manual selection.
 
-Live browser QA could not be completed. The shell sandbox prevented the localhost readiness connection and the installed browser automation process did not initialize successfully. The browser tool then explicitly blocked navigation to a local-file URL under its security policy. No alternate browser route was used to bypass that block.
+Version 0.2 is being verified on a staged Vercel deployment before promotion. The final results are recorded below after those checks.
 
-Therefore these remain unverified:
+## Physical limits
 
-- Actual rendering and responsive layout in Chrome/Edge.
-- Microphone permission and device behavior in a real browser.
-- Actual output audio, waveform accuracy and transition artifacts.
-- Two physical microphone inputs, physical disconnection and acoustic feedback behavior.
-- Audible gap or end-to-end latency.
+No physical contact microphone, selector circuit, helmet integration, RF transmitter or car connection was built or tested. No FIA approval is claimed.
 
-The local server was stopped after the preview attempt. The app can be opened from standalone.html; the optional server can be started by the user with START.cmd if file-origin microphone access is unavailable.
-
-## Not part of this prototype
-
-No physical contact microphone, selector electronics, helmet integration, RF transmitter or race-car connection was constructed or tested. No claim of FIA authorization is made. The hardware brief describes proposed work and the supplier/FIA review route.
-
-The nominal 12 ms gain ramp is a software parameter, not a verified interruption limit or real-time guarantee.
+Real microphone devices, physical disconnection, intelligibility under representative noise, switching artifacts and end-to-end radio latency require separate hardware testing. The nominal 12 ms gain ramp is a setting, not a verified interruption guarantee.

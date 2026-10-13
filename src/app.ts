@@ -1,18 +1,49 @@
+import { Router } from './router';
+import type { Channel, RoutingMode, FaultTarget, RoutingSnapshot } from './router';
+import { initializeNavigation } from './motion';
+
+type EventKind = 'info' | 'route' | 'status' | 'device' | 'session' | 'fault' | 'scenario' | 'error' | 'policy' | 'selection';
+interface BenchEvent { elapsedMs: number; type: EventKind; message: string; }
+interface InputChain {
+  amplitude: GainNode; gate: GainNode; analyser: AnalyserNode; route: GainNode;
+  samples: Float32Array<ArrayBuffer>; stream: MediaStream | null;
+  source?: AudioNode; oscillator?: OscillatorNode; track?: MediaStreamTrack;
+}
+declare global {
+  interface Window {
+    voiceBench: { snapshot: () => RoutingSnapshot; reportEvents: () => BenchEvent[] };
+  }
+}
+
 (function () {
   'use strict';
-  const $ = (id) => document.getElementById(id);
-  const router = new VoiceRouting.Router();
+  const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
+    const element = document.getElementById(id);
+    if (!element) throw new Error('Missing interface element: ' + id);
+    return element as T;
+  };
+  const button = (id: string) => $<HTMLButtonElement>(id);
+  const select = (id: string) => $<HTMLSelectElement>(id);
+  const inputElement = (id: string) => $<HTMLInputElement>(id);
+  const meter = (id: string) => $<HTMLMeterElement>(id);
+  const canvas = (id: string) => $<HTMLCanvasElement>(id);
+  const channels: Channel[] = ['primary', 'backup'];
+  const router = new Router();
   const names = { primary: 'Primary', backup: 'Backup' };
-  let context = null, inputs = {}, bus = null, linkGate = null;
-  let outputAnalyser = null, monitor = null, outputSamples = null;
+  let context: AudioContext | null = null;
+  let inputs: Partial<Record<Channel, InputChain>> = {};
+  let bus: GainNode | null = null, linkGate: GainNode | null = null;
+  let outputAnalyser: AnalyserNode | null = null, monitor: GainNode | null = null;
+  let outputSamples: Float32Array<ArrayBuffer> | null = null;
   let generation = 0, busy = false, sessionOrigin = performance.now();
-  let events = [], last = router.snapshot();
+  let events: BenchEvent[] = [], last = router.snapshot();
   const fadeSeconds = 0.012; // A software gain-ramp setting, not measured failover latency.
 
-  function addEvent(message, type = 'info') {
+  function addEvent(message: string, type: EventKind = 'info') {
     const elapsed = Math.max(0, performance.now() - sessionOrigin);
     events.push({ elapsedMs: Math.round(elapsed), type, message });
     if (events.length > 200) events.shift();
+    $('event-count').textContent = String(events.length);
     const item = document.createElement('li');
     const time = document.createElement('time');
     time.textContent = `${(elapsed / 1000).toFixed(1)}s`;
@@ -21,23 +52,23 @@
     item.append(time, text);
     if ($('events').querySelector('.empty-log')) $('events').replaceChildren();
     $('events').prepend(item);
-    while ($('events').children.length > 200) $('events').lastElementChild.remove();
-    $('export').disabled = false;
+    while ($('events').children.length > 200) $('events').lastElementChild?.remove();
+    button('export').disabled = false;
   }
   function showError(message = '') {
     $('error').textContent = message;
     $('error').hidden = !message;
   }
-  function ramp(param, value) {
+  function ramp(param: AudioParam, value: number) {
     if (!context || context.state === 'closed') return;
     // cancelAndHoldAtTime retains continuity if the user switches mid-ramp.
     if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(context.currentTime);
     else { param.cancelScheduledValues(context.currentTime); param.setValueAtTime(param.value, context.currentTime); }
     param.linearRampToValueAtTime(value, context.currentTime + fadeSeconds);
   }
-  function commit(reason) {
+  function commit(reason: string) {
     const state = router.snapshot();
-    for (const key of ['primary', 'backup']) {
+    for (const key of channels) {
       if (inputs[key]) {
         ramp(inputs[key].gate.gain, state.faults[key] ? 0 : 1);
         ramp(inputs[key].route.gain, state.output === key ? 1 : 0);
@@ -46,7 +77,7 @@
     if (linkGate) ramp(linkGate.gain, state.faults.link ? 0 : 1);
     if (state.output !== last.output || state.status !== last.status) {
       const label = state.output ? `${names[state.output]} routed to output` : {
-        stopped: 'Bench stopped', 'shared-link-down': 'Output lost: shared link failed',
+        active: 'Audio connected', stopped: 'Bench stopped', 'shared-link-down': 'Output lost: shared link failed',
         'selected-input-down': 'Output lost: selected input unavailable', 'no-input': 'Output lost: no usable input',
       }[state.status];
       addEvent(`${label}${reason ? ` · ${reason}` : ''}`, state.output ? 'route' : 'status');
@@ -54,31 +85,34 @@
     last = state;
     render(state);
   }
-  function render(state = router.snapshot()) {
+  function render(state: RoutingSnapshot = router.snapshot()) {
     const paused = state.running && context && context.state !== 'running';
-    $('start').disabled = state.running || busy;
-    $('stop').disabled = !state.running && !busy;
-    $('resume').hidden = !paused;
-    for (const id of ['source-mode', 'primary-device', 'backup-device', 'discover']) $(id).disabled = state.running || busy;
-    $('routing-mode').disabled = busy;
-    $('routing-mode').value = state.mode;
-    for (const key of ['primary', 'backup']) {
+    button('start').disabled = state.running || busy;
+    button('stop').disabled = !state.running && !busy;
+    button('global-stop').hidden = !state.running && !busy;
+    $('session-indicator').textContent = state.running ? (select('source-mode').value === 'microphone' ? 'Microphone session active' : 'Simulation running') : 'Session idle';
+    $('session-indicator').classList.toggle('live', state.running);
+    button('resume').hidden = !paused;
+    for (const id of ['source-mode', 'primary-device', 'backup-device', 'discover']) button(id).disabled = state.running || busy;
+    select('routing-mode').disabled = busy;
+    select('routing-mode').value = state.mode;
+    for (const key of channels) {
       const health = $(key + '-health');
       health.textContent = !state.running ? 'Not started' : state.faults[key] ? 'Fault injected' : state.healthy[key] ? 'Available' : 'Unavailable';
       health.className = 'health ' + (state.running ? state.healthy[key] ? 'healthy' : 'failed' : '');
       $(key + '-card').classList.toggle('selected', state.output === key);
       $(key + '-card').classList.toggle('failed', state.running && !state.healthy[key]);
-      $('fault-' + key).setAttribute('aria-pressed', String(state.faults[key]));
-      $('fault-' + key).textContent = state.faults[key] ? `Restore ${key}` : `Fail ${key}`;
-      $('fault-' + key).disabled = !state.running || !state.ready[key];
-      $('select-' + key).disabled = !state.running || !state.ready[key];
-      $('select-' + key).setAttribute('aria-pressed', String(state.running && state.selected === key));
+      button('fault-' + key).setAttribute('aria-pressed', String(state.faults[key]));
+      button('fault-' + key).textContent = state.faults[key] ? `Restore ${key}` : `Fail ${key}`;
+      button('fault-' + key).disabled = !state.running || !state.ready[key];
+      button('select-' + key).disabled = !state.running || !state.ready[key];
+      button('select-' + key).setAttribute('aria-pressed', String(state.running && state.selected === key));
     }
-    $('fault-link').disabled = !state.running;
-    $('fault-link').setAttribute('aria-pressed', String(state.faults.link));
-    $('fault-link').textContent = state.faults.link ? 'Restore shared output link' : 'Fail shared output link';
-    $('restore').disabled = !state.running;
-    for (const id of ['scenario-primary', 'scenario-manual', 'scenario-shared']) $(id).disabled = !state.running;
+    button('fault-link').disabled = !state.running;
+    button('fault-link').setAttribute('aria-pressed', String(state.faults.link));
+    button('fault-link').textContent = state.faults.link ? 'Restore shared output link' : 'Fail shared output link';
+    button('restore').disabled = !state.running;
+    for (const id of ['scenario-primary', 'scenario-manual', 'scenario-shared']) button(id).disabled = !state.running;
     $('bench-status-text').textContent = busy ? 'Preparing inputs…' : paused ? 'Audio engine paused' : !state.running ? 'Bench stopped' : state.output ? 'Voice path connected' : 'Output unavailable';
     $('bench-status').className = 'status-pill ' + (state.running && !paused ? state.output ? 'active' : 'failed' : '');
     $('output-letter').textContent = state.output === 'primary' ? 'A' : state.output === 'backup' ? 'B' : '—';
@@ -87,11 +121,11 @@
     $('route-summary').textContent = paused ? 'Audio paused — press Resume audio.' : !state.running ? 'Start the bench to route a signal.' : state.output ? `${names[state.output]} → local output · ${state.mode === 'auto' ? 'automatic backup' : 'manual selection'}` : 'No signal reaches the output.';
   }
   function updateMonitor() {
-    const value = Number($('volume').value);
+    const value = Number(inputElement('volume').value);
     $('volume-value').textContent = `${value}%`;
-    if (monitor) ramp(monitor.gain, $('listen').checked ? value / 100 : 0);
+    if (monitor) ramp(monitor.gain, inputElement('listen').checked ? value / 100 : 0);
   }
-  function stopTracks(stream) { if (stream) stream.getTracks().forEach((track) => { track.onended = null; track.onmute = null; track.onunmute = null; track.stop(); }); }
+  function stopTracks(stream: MediaStream | null | undefined) { if (stream) stream.getTracks().forEach((track) => { track.onended = null; track.onmute = null; track.onunmute = null; track.stop(); }); }
   function stopBench(log = true) {
     generation++;
     busy = false;
@@ -108,14 +142,15 @@
     if (log) commit('Inputs released');
     else { last = router.snapshot(); render(last); }
   }
-  function createInput(key, stream, token) {
+  function createInput(key: Channel, stream: MediaStream | null, token: number): InputChain {
+    if (!context || !bus) throw new Error('Audio engine is unavailable.');
     const amplitude = context.createGain();
     const gate = context.createGain();
     const analyser = context.createAnalyser();
     const route = context.createGain();
     analyser.fftSize = 1024;
     route.gain.value = 0;
-    const input = { amplitude, gate, analyser, route, samples: new Float32Array(1024), stream };
+    const input: InputChain = { amplitude, gate, analyser, route, samples: new Float32Array(1024), stream };
     if (stream) {
       input.source = context.createMediaStreamSource(stream);
       const track = stream.getAudioTracks()[0];
@@ -150,31 +185,34 @@
       input.oscillator.start();
       router.setReady(key, true);
     }
-    input.source.connect(amplitude).connect(gate).connect(analyser).connect(route).connect(bus);
+    input.source!.connect(amplitude).connect(gate).connect(analyser).connect(route).connect(bus);
     inputs[key] = input;
     return input;
   }
-  async function getInput(deviceId, token) {
+  async function getInput(deviceId: string, token: number): Promise<MediaStream | null> {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { deviceId: deviceId === 'default' ? undefined : { exact: deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false,
     });
     if (generation !== token) { stopTracks(stream); return null; }
     return stream;
   }
-  function microphoneError(error) {
-    return {
+  function microphoneError(error: unknown): string {
+    const name = typeof error === 'object' && error !== null && 'name' in error ? String(error.name) : '';
+    const message = typeof error === 'object' && error !== null && 'message' in error ? String(error.message) : '';
+    const messages: Record<string, string> = {
       NotAllowedError: 'Microphone access was denied. Allow microphone access in your browser, or use simulation.',
       NotFoundError: 'No microphone was found. Connect one or use simulation.',
       NotReadableError: 'The microphone is busy or unavailable. Close other audio apps and retry.',
       OverconstrainedError: 'That microphone is no longer available. Find microphones again.',
-    }[error.name] || error.message || 'Unable to start the audio bench.';
+    };
+    return messages[name] || message || 'Unable to start the audio bench.';
   }
   async function startBench() {
     showError();
-    const sourceMode = $('source-mode').value;
-    const policy = $('routing-mode').value;
-    const primaryId = $('primary-device').value;
-    const backupId = $('backup-device').value;
+    const sourceMode = select('source-mode').value;
+    const policy = select('routing-mode').value as RoutingMode;
+    const primaryId = select('primary-device').value;
+    const backupId = select('backup-device').value;
     if (sourceMode === 'microphone' && !navigator.mediaDevices?.getUserMedia) {
       showError('Microphone access is unavailable here. Use current Chrome or Edge over HTTPS or localhost, or choose simulation.'); return;
     }
@@ -185,11 +223,12 @@
     const token = generation;
     busy = true;
     sessionOrigin = performance.now(); events = [];
-    $('events').replaceChildren(); $('export').disabled = true;
+    $('event-count').textContent = '0';
+    $('events').replaceChildren(); button('export').disabled = true;
     router.clearFaults(); router.select('primary'); router.setMode(policy);
     render();
     try {
-      const AudioContextType = window.AudioContext || window.webkitAudioContext;
+      const AudioContextType = window.AudioContext;
       if (!AudioContextType) throw new Error('This browser does not support Web Audio. Try current Chrome or Edge.');
       context = new AudioContextType({ latencyHint: 'interactive' });
       await context.resume();
@@ -244,7 +283,7 @@
     }
   }
   function updateSourceUI() {
-    const simulation = $('source-mode').value === 'simulation';
+    const simulation = select('source-mode').value === 'simulation';
     $('microphone-setup').hidden = simulation;
     $('source-description').textContent = simulation ? 'Generated test signals · no microphone access' : 'Local microphone audio · no recording or upload';
     $('primary-label').textContent = simulation ? 'Generated signal · 210 Hz' : 'Microphone not connected';
@@ -256,15 +295,15 @@
     const audio = all.filter((device) => device.kind === 'audioinput');
     const physical = audio.filter((device) => !['default', 'communications'].includes(device.deviceId));
     const devices = physical.length ? physical : audio.filter((device) => device.deviceId !== 'communications');
-    const previous = { primary: $('primary-device').value, backup: $('backup-device').value };
-    for (const key of ['primary', 'backup']) {
-      const select = $(key + '-device');
-      select.replaceChildren();
-      if (key === 'backup') select.append(new Option('No second microphone', ''));
-      if (!devices.length && key === 'primary') select.append(new Option('Default microphone', 'default'));
-      devices.forEach((device, index) => select.append(new Option(device.label || `Microphone ${index + 1}`, device.deviceId)));
-      if ([...select.options].some((option) => option.value === previous[key])) select.value = previous[key];
-      else if (key === 'backup') select.value = '';
+    const previous = { primary: select('primary-device').value, backup: select('backup-device').value };
+    for (const key of channels) {
+      const deviceSelect = select(key + '-device');
+      deviceSelect.replaceChildren();
+      if (key === 'backup') deviceSelect.append(new Option('No second microphone', ''));
+      if (!devices.length && key === 'primary') deviceSelect.append(new Option('Default microphone', 'default'));
+      devices.forEach((device, index) => deviceSelect.append(new Option(device.label || `Microphone ${index + 1}`, device.deviceId)));
+      if ([...deviceSelect.options].some((option) => option.value === previous[key])) deviceSelect.value = previous[key];
+      else if (key === 'backup') deviceSelect.value = '';
     }
     $('device-note').textContent = `${devices.length} input ${devices.length === 1 ? 'device' : 'devices'} found. ${devices.length < 2 ? 'A second independent microphone is needed for a physical backup.' : 'Choose two separate physical microphones; different device names alone do not prove electrical independence.'}`;
   }
@@ -272,7 +311,7 @@
     if (!navigator.mediaDevices?.getUserMedia) { showError('Microphone access is unavailable here. Use current Chrome or Edge over HTTPS or localhost, or choose simulation.'); return; }
     const token = ++generation;
     busy = true; showError(); render();
-    let stream;
+    let stream: MediaStream | undefined;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       if (generation !== token) return;
@@ -280,13 +319,13 @@
     } catch (error) { if (generation === token) showError(microphoneError(error)); }
     finally { stopTracks(stream); if (generation === token) { busy = false; render(); } }
   }
-  function fault(key) {
+  function fault(key: FaultTarget) {
     const value = !router.faults[key];
     router.setFault(key, value);
     addEvent(`${key === 'link' ? 'Shared output link' : names[key] + ' input'} ${value ? 'fault injected' : 'fault restored'}`, 'fault');
     commit('Fault control');
   }
-  function scenario(type) {
+  function scenario(type: 'primary' | 'manual' | 'shared') {
     router.clearFaults(); router.select('primary');
     if (type === 'primary') { router.setMode('auto'); router.setFault('primary', true); }
     if (type === 'manual') { router.setMode('manual'); router.setFault('primary', true); }
@@ -296,8 +335,8 @@
   }
   function exportReport() {
     const report = {
-      prototype: 'Voice continuity bench v0.1', exportedAt: new Date().toISOString(),
-      sourceMode: $('source-mode').value, state: router.snapshot(),
+      prototype: 'Voice continuity bench v0.2', exportedAt: new Date().toISOString(),
+      sourceMode: select('source-mode').value, state: router.snapshot(),
       gainRampSettingMs: fadeSeconds * 1000,
       timingNote: 'Event timestamps use the browser clock. They do not measure audio gap or end-to-end radio latency.',
       limitations: ['Local software demonstrator, not FIA-approved equipment', 'No RF transmission', 'Generated tones in simulation, not human speech', 'No audio recording', 'Shared computer, audio engine and output remain common points of failure'],
@@ -307,14 +346,14 @@
     const link = document.createElement('a'); link.href = url; link.download = 'voice-bench-report.json'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  function draw(canvas, samples, color) {
+  function draw(canvas: HTMLCanvasElement, samples: Float32Array<ArrayBuffer> | null | undefined, color: string) {
     const width = canvas.clientWidth, height = canvas.clientHeight;
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     if (!width || !height) return;
     if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
       canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
     }
-    const pen = canvas.getContext('2d'); pen.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const pen = canvas.getContext('2d'); if (!pen) return; pen.setTransform(ratio, 0, 0, ratio, 0, 0);
     pen.clearRect(0, 0, width, height); pen.strokeStyle = '#263643'; pen.lineWidth = 1;
     pen.beginPath();
     for (let x = 0; x < 5; x++) { pen.moveTo(width * x / 4, 0); pen.lineTo(width * x / 4, height); }
@@ -327,49 +366,51 @@
     }
     pen.stroke();
   }
-  function showLevel(key, samples) {
+  function showLevel(key: Channel | 'output', samples: Float32Array<ArrayBuffer> | null | undefined) {
     let rms = 0;
     if (samples) { for (const value of samples) rms += value * value; rms = Math.sqrt(rms / samples.length); }
     const db = rms > 0.00003 ? Math.max(-90, 20 * Math.log10(rms)) : -90;
     $(key + '-db').textContent = db <= -90 ? '−∞ dBFS' : `${db.toFixed(1)} dBFS`;
-    $(key + '-meter').value = Math.max(0, Math.min(1, (db + 60) / 60));
+    meter(key + '-meter').value = Math.max(0, Math.min(1, (db + 60) / 60));
   }
-  function frame(now) {
-    for (const key of ['primary', 'backup']) {
+  function frame(now: number) {
+    for (const key of channels) {
       const input = inputs[key];
       if (input) {
         if (input.oscillator && context?.state === 'running') input.amplitude.gain.setTargetAtTime(0.08 + 0.09 * (0.5 + 0.5 * Math.sin(now / 350 + (key === 'primary' ? 0 : 1.7))), context.currentTime, 0.03);
         input.analyser.getFloatTimeDomainData(input.samples);
       }
-      draw($(key + '-wave'), input?.samples, router.snapshot().output === key ? '#a9efcc' : '#7899ad');
+      draw(canvas(key + '-wave'), input?.samples, router.snapshot().output === key ? '#77d4b5' : '#6d8799');
       showLevel(key, input?.samples);
     }
-    if (outputAnalyser) outputAnalyser.getFloatTimeDomainData(outputSamples);
-    draw($('output-wave'), outputAnalyser ? outputSamples : null, '#a9efcc');
+    if (outputAnalyser && outputSamples) outputAnalyser.getFloatTimeDomainData(outputSamples);
+    draw(canvas('output-wave'), outputAnalyser ? outputSamples : null, '#77d4b5');
     showLevel('output', outputAnalyser ? outputSamples : null);
     requestAnimationFrame(frame);
   }
-  $('start').addEventListener('click', startBench);
-  $('stop').addEventListener('click', () => stopBench());
-  $('resume').addEventListener('click', () => context?.resume().then(() => render()).catch((error) => showError(error.message)));
-  $('source-mode').addEventListener('change', updateSourceUI);
-  $('routing-mode').addEventListener('change', () => { router.setMode($('routing-mode').value); addEvent(`${router.mode === 'auto' ? 'Automatic backup' : 'Manual selection'} enabled`, 'policy'); commit('Policy changed'); });
-  for (const key of ['primary', 'backup']) {
-    $('select-' + key).addEventListener('click', () => { router.select(key); addEvent(`${names[key]} selected manually`, 'selection'); commit('Driver selection'); });
-    $('fault-' + key).addEventListener('click', () => fault(key));
+  button('start').addEventListener('click', startBench);
+  button('stop').addEventListener('click', () => stopBench());
+  button('resume').addEventListener('click', () => context?.resume().then(() => render()).catch((error) => showError(microphoneError(error))));
+  select('source-mode').addEventListener('change', updateSourceUI);
+  select('routing-mode').addEventListener('change', () => { router.setMode(select('routing-mode').value as RoutingMode); addEvent(`${router.mode === 'auto' ? 'Automatic backup' : 'Manual selection'} enabled`, 'policy'); commit('Policy changed'); });
+  for (const key of channels) {
+    button('select-' + key).addEventListener('click', () => { router.select(key); addEvent(`${names[key]} selected manually`, 'selection'); commit('Driver selection'); });
+    button('fault-' + key).addEventListener('click', () => fault(key));
   }
-  $('fault-link').addEventListener('click', () => fault('link'));
-  $('restore').addEventListener('click', () => { router.clearFaults(); addEvent('All injected faults restored; current healthy route retained', 'fault'); commit('Faults restored'); });
-  $('discover').addEventListener('click', discover);
-  for (const type of ['primary', 'manual', 'shared']) $('scenario-' + type).addEventListener('click', () => scenario(type));
-  $('listen').addEventListener('change', updateMonitor); $('volume').addEventListener('input', updateMonitor);
-  $('export').addEventListener('click', exportReport); $('export').disabled = true;
+  button('fault-link').addEventListener('click', () => fault('link'));
+  button('restore').addEventListener('click', () => { router.clearFaults(); addEvent('All injected faults restored; current healthy route retained', 'fault'); commit('Faults restored'); });
+  button('discover').addEventListener('click', discover);
+  for (const type of ['primary', 'manual', 'shared'] as const) $('scenario-' + type).addEventListener('click', () => scenario(type));
+  inputElement('listen').addEventListener('change', updateMonitor); inputElement('volume').addEventListener('input', updateMonitor);
+  button('export').addEventListener('click', exportReport); button('export').disabled = true;
   navigator.mediaDevices?.addEventListener('devicechange', () => {
     if (router.running || busy) addEvent('Device inventory changed; existing tracks remain selected', 'device');
-    else if ($('source-mode').value === 'microphone') updateDevices().catch(() => {});
+    else if (select('source-mode').value === 'microphone') updateDevices().catch(() => {});
   });
   window.addEventListener('pagehide', () => stopBench(false));
   // A read-only snapshot allows deterministic browser QA without exposing audio.
   window.voiceBench = { snapshot: () => router.snapshot(), reportEvents: () => events.map((event) => ({ ...event })) };
+  button('global-stop').addEventListener('click', () => stopBench());
+  initializeNavigation();
   render(); requestAnimationFrame(frame);
 })();

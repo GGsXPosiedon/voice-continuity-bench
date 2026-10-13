@@ -6,3 +6,4 @@ public/
 !.env.example
 npm-debug.log*
 voice-bench-report.json
+.test-build/

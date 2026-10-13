@@ -1,6 +1,8 @@
-# Voice continuity bench v0.1
+# Voice continuity bench
 
-A computer-only prototype of a backup microphone selector. It provides real local audio routing plus simulated failures. It is research software, not FIA-approved equipment or a radio system.
+**[Open the live app on Vercel](https://voice-continuity-bench.vercel.app/)** · [System design](https://voice-continuity-bench.vercel.app/#system) · [Project story](https://voice-continuity-bench.vercel.app/#story)
+
+An independent TypeScript research app for exploring primary and backup microphone paths. Use generated test signals or connect microphones, deliberately introduce failures, and observe which input reaches the output. Audio stays in your browser.
 
 ## The Singapore GP story
 
@@ -10,82 +12,80 @@ After the race, Max explained that GP had tried asking questions in code, said t
 
 ## Why we built this
 
-That incident started our conversation about a practical engineering question: **what could keep a driver's voice available when the primary microphone path fails?** We explored a second microphone, separate wiring, and a selector feeding the prescribed voice system. We then built this computer prototype to make those ideas testable before buying or designing hardware.
+That incident started our conversation about a practical engineering question: **what could keep a driver's voice available when the primary microphone path fails?** We explored a second microphone, separate wiring, and a selector feeding the prescribed voice system. We built this computer prototype to make those ideas testable before buying or designing hardware.
 
 The bench lets us deliberately lose the primary input, move to a backup automatically or manually, and see why two microphones still cannot survive a failed shared output. It also preserves an important distinction: a quiet driver is not the same as a broken microphone, so silence alone never triggers failover.
 
-Singapore is the inspiration, not a hardware diagnosis. The reports above do not establish exactly which component failed in Max's car. Our injected faults model possible failures; they do not reproduce Red Bull's equipment. This is an independent learning and research project with no affiliation to Formula 1, the FIA, Red Bull Racing, or Max Verstappen. Any on-car implementation would need the relevant supplier and FIA authorization.
+Singapore is the inspiration, not a hardware diagnosis. The reports above do not establish exactly which component failed in Max's car. Our injected faults model possible failures; they do not reproduce Red Bull's equipment. This project has no affiliation with Formula 1, the FIA, Red Bull Racing, or Max Verstappen. Any on-car implementation would need the relevant supplier and FIA authorization.
 
-## Start
+## Using the app
 
-Double-click **standalone.html** to open the complete app in Chrome or Edge. This version needs no installation and no server. Simulation uses generated test tones, not human speech.
+Open the **[live Vercel app](https://voice-continuity-bench.vercel.app/)**. The project's deployment protection may require Vercel sign-in.
 
-If microphone access is unavailable from a local file, use the included local server:
+1. Leave the source on **Simulation** and the selection policy on **Automatic backup**.
+2. Select **Start session**. Primary A feeds the output.
+3. Select **Fail primary**. Backup B takes over.
+4. Restore primary. The healthy backup stays selected until you deliberately select another route or it fails.
+5. Try the manual and shared-link failure presets.
 
-1. Double-click **START.cmd** on this computer (Node.js is already installed here).
-2. Open **http://localhost:8787** in Chrome or Edge.
-3. Keep the terminal open while using the bench. Press Ctrl+C when finished.
+Listening is off by default. Enable **Listen to output** to hear the generated tones. For live voice, stop the session, select **Microphone inputs**, grant permission through **Find microphones**, and choose the available devices. Use headphones for microphone listening.
 
-On another computer with Node.js, run `node serve.cjs` from this folder. The server binds only to this computer. If port 8787 is busy, set `VOICE_BENCH_PORT` to another free port before starting it.
+A single microphone supports one physical input only. The app rejects duplicate selections and matching resolved device IDs, but different operating-system device IDs do not prove electrical independence.
 
-## First experiment — no hardware
+## Interface and motion
 
-1. Leave Input source on **Simulation** and Routing policy on **Automatic backup**.
-2. Click **Start bench**. Primary A feeds the output.
-3. Click **Fail primary**. Backup B feeds the output.
-4. Click **Restore primary**. The healthy backup stays selected; there is no automatic return.
-5. Click **Use primary** to return deliberately. This also selects manual mode.
-6. Click **Fail shared output link**. Both input signals remain present, but output is lost. Restoring the link restores the selected healthy path.
+The app has three pages: **Bench**, **System design**, and **Project story**. A starting-light sequence and an animated open-wheel car introduce the app; the car also crosses the screen during page transitions. Navigation preserves an active audio session, with **Stop session** always available in the header.
 
-Listen to output is off by default. Enable it if you want to hear the tones; A uses 210 Hz and B uses 310 Hz. The waveforms and meters show actual Web Audio samples, not decorative animation.
+Page transitions queue rapid navigation, support browser history, and move keyboard focus to the destination heading. Reduced-motion preferences skip the loading and car animations, including when the preference changes during a transition.
 
-## Try your voice
+## Switching behavior and limits
 
-1. Stop the bench and choose **Microphone bench**.
-2. Click **Find microphones** and grant browser microphone permission.
-3. Choose the primary device. Leave backup empty if you have only one microphone.
-4. Click **Start bench**, speak, and observe the input/output levels.
-5. For listening, use headphones and start with a low volume to avoid acoustic feedback.
+- Automatic selection reacts to an injected fault or a source that explicitly reports itself unavailable.
+- Quiet speech and silence do not trigger failover. A microphone that silently produces zeros without a fault indication is not automatically diagnosed.
+- Recovery keeps the currently healthy route selected. Manual selection remains under the user's control.
+- A shared output failure defeats both inputs.
+- Stop releases microphone tracks and closes the audio context.
+- The nominal **12 ms gain ramp** is a software setting, not a measured interruption limit, hardware latency, or real-time guarantee. Brief overlap may occur during the crossfade.
 
-With one microphone, failing primary correctly produces no output: there is no physical backup. Two separate microphones can be selected later. The app rejects matching device selections and matching resolved device IDs, but operating-system device IDs cannot prove electrical independence. USB hubs, interfaces, power, browser, computer and speaker output can all remain shared.
+The app contains no speech recognition, audio recording, upload service, RF transmitter, backend, or database. Exported JSON contains session events, settings and limitations, not audio. The engineer-to-driver return path and FIA/broadcaster distribution are requirements in the hardware brief, not implemented network features.
 
-## Switching behavior
+## Development
 
-- Automatic mode switches when the selected input is explicitly unavailable: injected fault, audio track ended, or the browser reports that the source cannot supply media data.
-- Quiet speech and ordinary silence never trigger failover. A microphone that silently produces zeros without reporting a fault will not be detected by this prototype.
-- Recovery retains the current healthy route. If that route later fails and the other input has recovered, automatic mode may switch to the other input.
-- Manual selection retains the user's choice even if that input fails.
-- Stop releases microphone tracks and closes the audio context. Leaving the page also releases inputs.
-- The audio engine applies a nominal **12 ms gain ramp**. This is not a measured failover gap, hardware latency or radio latency. Browser scheduling is not deterministic real-time control. Brief overlap may occur during the crossfade; no exactly-one-path hardware interlock is claimed.
+Requirements: Node.js 22 or newer and npm.
 
-## Privacy and scope
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm start
+```
 
-Audio stays in the local browser audio graph. The app contains no speech recognition, recording, upload, remote telemetry, remote dependencies or RF transmitter. Export report saves JSON containing events, settings and limitations; no audio is included. Browser microphone permission is requested only after an explicit action.
+TypeScript runs in strict mode. esbuild produces the browser bundle after type checking; Vercel publishes the generated `public/` directory. No API keys or environment variables are required by the app.
 
-The prototype covers the driver's outgoing local audio selection. The engineer-to-driver return path, pit-wall monitoring and FIA/broadcaster distribution are architectural requirements in the hardware plan, not implemented network features.
+| Source | Responsibility |
+| --- | --- |
+| `src/router.ts` | Typed routing policy and immutable state snapshots |
+| `src/app.ts` | Web Audio graph, input lifecycle, metering and controls |
+| `src/motion.ts` | Page navigation, loading sequence and car transitions |
+| `index.html`, `styles.css` | Accessible interface and responsive layout |
+| `tests/` | Routing, input lifecycle and navigation tests |
+| `build-site.cjs` | Static production build and isolated test bundles |
+| `vercel.json` | Vercel build and publication settings |
 
-See **hardware-design.md** for the proposed hardware architecture, failure coverage and FIA approval route. See **validation.md** for the checks actually performed and their limits.
+`public/`, `.test-build/`, `node_modules/`, `.vercel/` and environment files are excluded from Git. The source tree is authoritative; generated JavaScript is build output.
 
-## Source and tests
+## Design and verification
 
-- `index.html`, `styles.css`, `app.js`: buildless browser application.
-- `routing-core.js`: routing state machine, shared with the unit tests.
-- `standalone.html`: self-contained copy, generated by `build-standalone.cjs`.
-- `serve.cjs`: dependency-free local server.
-- `tests/routing.test.cjs`, `tests/app-lifecycle.test.cjs`: policy and mocked application lifecycle tests. Run `node --test tests/routing.test.cjs tests/app-lifecycle.test.cjs`.
+- [Hardware design brief](hardware-design.md): proposed capture paths, failure coverage and supplier/FIA review route.
+- [Validation record](validation.md): checks performed and the limits of the prototype.
 
-After editing the source, run `node build-standalone.cjs` to update the self-contained copy. No third-party packages are required to run the app or policy tests.
+Browser tests of simulation do not validate real microphone hardware, cockpit use, intelligibility under noise, or end-to-end radio latency.
 
-## Sources
+## References
 
-- FIA 2026 technical regulations, issue 20, particularly C8.8 and C17.3: https://www.fia.com/system/files/documents/fia_2026_f1_regulations_-_section_c_technical_-_iss_20_-_2026-08-05.pdf
-- MDN microphone access and permission requirements: https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia
-- MDN Web Audio microphone input: https://developer.mozilla.org/en-US/docs/Web/API/AudioContext/createMediaStreamSource
+- [FIA 2026 technical regulations, issue 20](https://www.fia.com/system/files/documents/fia_2026_f1_regulations_-_section_c_technical_-_iss_20_-_2026-08-05.pdf), particularly C8.8 and C17.3.
+- [MDN microphone access and permission requirements](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia).
+- [MDN Web Audio microphone input](https://developer.mozilla.org/en-US/docs/Web/API/AudioContext/createMediaStreamSource).
 
-Prepared 13 October 2026.
-
-## Vercel deployment
-
-This repository includes `vercel.json` and a dependency-free static build. Import the repository into Vercel with framework **Other**; the configuration runs `node build-site.cjs` and publishes only the five web files in `public/`. Microphone audio remains in the browser after hosting.
-
-Run `npm test` for the 22 automated checks and `npm run build` to prepare the static output. The `public/` directory is generated and ignored by Git. No API keys, environment variables, backend or database are required.
+Version 0.2 · Prepared 13 October 2026.

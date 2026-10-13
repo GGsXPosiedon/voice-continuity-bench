@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Router } = require('../routing-core.js');
+const { Router } = require('../.test-build/router.cjs');
 function running(primary = true, backup = true) {
   const router = new Router();
   router.setReady('primary', primary); router.setReady('backup', backup);

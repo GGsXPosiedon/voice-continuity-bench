@@ -10,3 +10,4 @@ START.cmd
 serve.cjs
 validation.md
 README.md
+.test-build/
