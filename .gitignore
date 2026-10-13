@@ -1,0 +1,8 @@
+.vercel/
+node_modules/
+public/
+.env
+.env.*
+!.env.example
+npm-debug.log*
+voice-bench-report.json
