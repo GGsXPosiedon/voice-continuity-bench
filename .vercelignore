@@ -1,0 +1,12 @@
+.git/
+.vercel/
+.env
+.env.*
+node_modules/
+public/
+tests/
+standalone.html
+START.cmd
+serve.cjs
+validation.md
+README.md
